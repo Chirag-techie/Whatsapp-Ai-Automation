@@ -1,0 +1,44 @@
+{
+  "name": "whatsapp-commerce-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "worker:dev": "tsx watch src/worker-server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "worker": "tsx src/worker-server.ts"
+  },
+  "dependencies": {
+    "@google/genai": "latest",
+    "axios": "latest",
+    "bullmq": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "drizzle-orm": "latest",
+    "express": "latest",
+    "helmet": "latest",
+    "ioredis": "latest",
+    "pino": "latest",
+    "pino-http": "latest",
+    "pino-pretty": "latest",
+    "postgres": "^3.4.9",
+    "uuid": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/pino-http": "^5.8.4",
+    "@types/uuid": "latest",
+    "drizzle-kit": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
