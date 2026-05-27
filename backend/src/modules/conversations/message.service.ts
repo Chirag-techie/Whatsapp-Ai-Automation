@@ -1,20 +1,25 @@
-import { db } from "../../core/database/db.js";
+import {
+  asc,
+  eq,
+} from "drizzle-orm";
 
-import { messages } from "../../core/database/schema/index.js";
+import { db }
+from "../../core/database/db.js";
 
-import { logger } from "../../core/logger/logger.js";
+import { messages }
+from "../../core/database/schema/index.js";
 
-type MessageRole =
-  | "user"
-  | "assistant"
-  | "system";
+import type {DbExecutor,} from "../../core/database/types.js";
+
+import { logger }
+from "../../core/logger/logger.js";
 
 interface SaveMessageInput {
   customerId: string;
 
   conversationId: string;
 
-  role: MessageRole;
+  role: "user" | "assistant";
 
   content: unknown;
 
@@ -24,25 +29,23 @@ interface SaveMessageInput {
 export const messageService = {
   async saveMessage(
     data: SaveMessageInput,
-    executor = db,
+    executor: DbExecutor = db,
   ) {
     const result = await executor
       .insert(messages)
       .values({
         customerId: data.customerId,
+
         conversationId:
           data.conversationId,
+
         whatsappMessageId:
           data.whatsappMessageId,
+
         role: data.role,
+
         content: data.content,
       })
-      // IMPORTANT:
-      // Drizzle query builders are immutable.
-      // Chain directly.
-      //
-      // Safe because PostgreSQL UNIQUE
-      // allows multiple NULL values.
       .onConflictDoNothing({
         target:
           messages.whatsappMessageId,
@@ -51,19 +54,40 @@ export const messageService = {
         id: messages.id,
       });
 
-    // Duplicate webhook delivery
-    if (result.length === 0) {
+    if (
+      data.whatsappMessageId &&
+      result.length === 0
+    ) {
       logger.warn(
         {
           whatsappMessageId:
             data.whatsappMessageId,
         },
-        "Duplicate message ignored",
+        "Duplicate inbound message ignored",
       );
 
       return null;
     }
 
     return result[0];
+  },
+
+  async getConversationHistory(
+    conversationId: string,
+    limit = 10,
+  ) {
+    return db
+      .select()
+      .from(messages)
+      .where(
+        eq(
+          messages.conversationId,
+          conversationId,
+        ),
+      )
+      .orderBy(
+        asc(messages.createdAt),
+      )
+      .limit(limit);
   },
 };

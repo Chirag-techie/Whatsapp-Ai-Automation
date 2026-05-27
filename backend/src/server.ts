@@ -1,66 +1,31 @@
-import { createServer } from "http";
-
-import app from "./app.js";
+import { app } from "./app.js";
 
 import { env } from "./core/config/env.js";
 
-import {
-  connectDatabase,
-  queryClient,
-} from "./core/database/db.js";
-
 import { logger } from "./core/logger/logger.js";
 
-import { redis } from "./core/redis/redis.js";
+import { connectDatabase }
+from "./core/database/db.js";
 
-const server = createServer(app);
+import "./core/redis/redis.js";
 
 const startServer = async () => {
-  try {
-    await connectDatabase();
+  await connectDatabase();
 
-    server.listen(env.PORT, () => {
-      logger.info(
-        `Server running on port ${env.PORT}`
-      );
-    });
-  } catch (error) {
-    logger.error(
-      { error },
-      "Failed to start server"
+  app.listen(env.PORT, () => {
+    logger.info(
+      `HTTP server running on port ${env.PORT}`,
     );
-
-    process.exit(1);
-  }
+  });
 };
 
-const shutdown = async (signal: string) => {
-  logger.info(
-    `${signal} received. Shutting down gracefully...`
+startServer().catch((error) => {
+  logger.error(
+    {
+      error,
+    },
+    "Failed to start server",
   );
 
-  try {
-    server.close(async () => {
-      await queryClient.end();
-
-      await redis.quit();
-
-      logger.info("All connections closed");
-
-      process.exit(0);
-    });
-  } catch (error) {
-    logger.error(
-      { error },
-      "Error during shutdown"
-    );
-
-    process.exit(1);
-  }
-};
-
-process.on("SIGINT", () => shutdown("SIGINT"));
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-
-startServer();
+  process.exit(1);
+});

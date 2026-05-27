@@ -4,16 +4,19 @@ import {
   inArray,
 } from "drizzle-orm";
 
-import { db } from "../../core/database/db.js";
+import { db }
+from "../../core/database/db.js";
 
 import {
   conversations,
 } from "../../core/database/schema/index.js";
 
+import type {DbExecutor,} from "../../core/database/types.js";
+
 export const conversationService = {
   async resolveActiveConversation(
     customerId: string,
-    executor = db,
+    executor: DbExecutor = db,
   ) {
     const existingConversation =
       await executor
@@ -36,11 +39,7 @@ export const conversationService = {
         )
         .limit(1);
 
-    // IMPORTANT:
-    // select().from() returns array
-    if (
-      existingConversation.length > 0
-    ) {
+    if (existingConversation.length > 0) {
       return existingConversation[0];
     }
 
