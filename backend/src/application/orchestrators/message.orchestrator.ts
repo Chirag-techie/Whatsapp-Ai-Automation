@@ -1,26 +1,40 @@
-import { db } from "../../core/database/db.js";
+import { db }
+from "../../core/database/db.js";
 
-import { logger } from "../../core/logger/logger.js";
+import { logger }
+from "../../core/logger/logger.js";
 
-import { webhookParserService } from "../../modules/whatsapp/services/webhook-parser.service.js";
+import { webhookParserService }
+from "../../modules/whatsapp/services/webhook-parser.service.js";
 
-import { customerService } from "../../modules/customers/customer.service.js";
+import { customerService }
+from "../../modules/customers/customer.service.js";
 
-import { conversationService } from "../../modules/conversations/conversation.service.js";
+import { conversationService }
+from "../../modules/conversations/conversation.service.js";
 
-import { messageService } from "../../modules/conversations/message.service.js";
+import { messageService }
+from "../../modules/conversations/message.service.js";
 
-import { aiService } from "../../modules/ai/ai.service.js";
+import { aiService }
+from "../../modules/ai/ai.service.js";
+
+import { promptBuilderService }
+from "../../modules/ai/prompt-builder.service.js";
+
+import type {
+  MessageContent,
+} from "../../shared/types/message.types.js";
+
+const MAX_HISTORY_MESSAGES = 10;
 
 export const messageOrchestrator = {
   async processIncomingWebhook(
     payload: unknown,
   ) {
-    // STEP 1: Parse payload
+    // STEP 1: Parse webhook payload
     const parsedMessage =
-      webhookParserService.parse(
-        payload,
-      );
+      webhookParserService.parse(payload);
 
     // STEP 2: Ignore unsupported events
     if (!parsedMessage) {
@@ -31,17 +45,27 @@ export const messageOrchestrator = {
       return;
     }
 
-    let customerId!: string;
+    let customerRef:
+      | Awaited<
+          ReturnType<
+            typeof customerService.upsertCustomer
+          >
+        >
+      | undefined;
 
-    let conversationId!: string;
+    let conversationRef:
+      | Awaited<
+          ReturnType<
+            typeof conversationService.resolveActiveConversation
+          >
+        >
+      | undefined;
 
-    // IMPORTANT:
-    // Return transaction result
-    // to avoid duplicate AI replies.
+    // STEP 3: Transaction boundary
     const isNewMessage =
       await db.transaction(
         async (tx) => {
-          // STEP 3: Upsert customer
+          // STEP 4: Upsert customer
           const customer =
             await customerService.upsertCustomer(
               parsedMessage.senderPhone,
@@ -49,45 +73,49 @@ export const messageOrchestrator = {
               tx,
             );
 
-          customerId = customer.id;
+          customerRef = customer;
 
-          // STEP 4: Resolve conversation
+          // STEP 5: Resolve conversation
           const conversation =
             await conversationService.resolveActiveConversation(
               customer.id,
               tx,
             );
 
-          conversationId =
-            conversation.id;
+          conversationRef =
+            conversation;
 
-          // STEP 5: Save inbound
+          // STEP 6: Persist inbound message
           const savedMessage =
             await messageService.saveMessage(
               {
                 customerId:
                   customer.id,
+
                 conversationId:
                   conversation.id,
+
                 whatsappMessageId:
                   parsedMessage.whatsappMessageId,
+
                 role: "user",
+
                 content: {
-                  type:
-                    parsedMessage.messageType,
+                  type: "text",
+
                   text:
                     parsedMessage.textBody,
+
                   timestamp:
                     parsedMessage.timestamp,
-                  raw:
-                    parsedMessage.raw,
-                },
+
+                  raw: parsedMessage.raw,
+                } satisfies MessageContent,
               },
               tx,
             );
 
-          // IMPORTANT:
-          // Explicit transaction result.
+          // STEP 7: Stop duplicates
           if (!savedMessage) {
             logger.warn(
               {
@@ -104,8 +132,13 @@ export const messageOrchestrator = {
             {
               messageId:
                 savedMessage.id,
-              customerId,
-              conversationId,
+
+              customerId:
+                customer.id,
+
+              conversationId:
+                conversation.id,
+
               whatsappMessageId:
                 parsedMessage.whatsappMessageId,
             },
@@ -116,50 +149,79 @@ export const messageOrchestrator = {
         },
       );
 
-    // IMPORTANT:
-    // Prevent duplicate AI generation.
+    // STEP 8: Stop AI for duplicates
     if (!isNewMessage) {
       return;
     }
 
-    // STEP 6:
-    // AI generation OUTSIDE transaction.
+    if (
+      !customerRef ||
+      !conversationRef
+    ) {
+      logger.error(
+        "Transaction references missing",
+      );
+
+      return;
+    }
+
     try {
-      const aiReply =
-        await aiService.generateReply(
-          parsedMessage.textBody,
+      // STEP 9: Fetch memory
+      const history =
+        await messageService.getConversationHistory(
+          conversationRef.id,
+          MAX_HISTORY_MESSAGES,
         );
 
-      // STEP 7:
-      // Save assistant response.
-      await messageService.saveMessage({
-        customerId,
-        conversationId,
-        role: "assistant",
-        content: {
-          type: "text",
-          text: aiReply,
-          generatedAt:
-            new Date().toISOString(),
-        },
-      });
+      // STEP 10: Build prompt
+      const prompt =
+        promptBuilderService.buildConversationPrompt(
+          history,
+        );
+
+      // STEP 11: Generate AI response
+      const aiReply =
+        await aiService.generateReply(
+          prompt,
+        );
 
       logger.info(
         {
-          customerId,
-          conversationId,
+          customerId:
+            customerRef.id,
+
+          conversationId:
+            conversationRef.id,
         },
         "AI response generated successfully",
       );
+
+      // STEP 12: Persist assistant reply
+      await messageService.saveMessage({
+        customerId:
+          customerRef.id,
+
+        conversationId:
+          conversationRef.id,
+
+        role: "assistant",
+
+        content: {
+          type: "text",
+
+          text: aiReply,
+        },
+      });
     } catch (error) {
-      // IMPORTANT:
-      // AI failure must NOT rollback
-      // inbound message persistence.
       logger.error(
         {
+          customerId:
+            customerRef.id,
+
+          conversationId:
+            conversationRef.id,
+
           error,
-          customerId,
-          conversationId,
         },
         "AI response generation failed",
       );

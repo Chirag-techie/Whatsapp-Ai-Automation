@@ -1,27 +1,29 @@
 import {
-  asc,
+  desc,
   eq,
 } from "drizzle-orm";
 
-import { db }
-from "../../core/database/db.js";
+import { db } from "../../core/database/db.js";
 
 import { messages }
 from "../../core/database/schema/index.js";
 
-import type {DbExecutor,} from "../../core/database/types.js";
-
 import { logger }
 from "../../core/logger/logger.js";
+
+import type {
+  MessageContent,
+  MessageRole,
+} from "../../shared/types/message.types.js";
 
 interface SaveMessageInput {
   customerId: string;
 
   conversationId: string;
 
-  role: "user" | "assistant";
+  role: MessageRole;
 
-  content: unknown;
+  content: MessageContent;
 
   whatsappMessageId?: string;
 }
@@ -29,21 +31,16 @@ interface SaveMessageInput {
 export const messageService = {
   async saveMessage(
     data: SaveMessageInput,
-    executor: DbExecutor = db,
+    executor: typeof db = db,
   ) {
     const result = await executor
       .insert(messages)
       .values({
         customerId: data.customerId,
-
-        conversationId:
-          data.conversationId,
-
+        conversationId: data.conversationId,
         whatsappMessageId:
-          data.whatsappMessageId,
-
+          data.whatsappMessageId ?? null,
         role: data.role,
-
         content: data.content,
       })
       .onConflictDoNothing({
@@ -63,7 +60,7 @@ export const messageService = {
           whatsappMessageId:
             data.whatsappMessageId,
         },
-        "Duplicate inbound message ignored",
+        "Duplicate message ignored",
       );
 
       return null;
@@ -74,9 +71,9 @@ export const messageService = {
 
   async getConversationHistory(
     conversationId: string,
-    limit = 10,
+    limit: number = 10,
   ) {
-    return db
+    const history = await db
       .select()
       .from(messages)
       .where(
@@ -86,8 +83,16 @@ export const messageService = {
         ),
       )
       .orderBy(
-        asc(messages.createdAt),
+        desc(messages.createdAt),
       )
       .limit(limit);
+
+    return history
+      .reverse()
+      .map((message) => ({
+        ...message,
+        content:
+          message.content as MessageContent,
+      }));
   },
 };

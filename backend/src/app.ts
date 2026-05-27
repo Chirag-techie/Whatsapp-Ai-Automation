@@ -41,4 +41,4 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.use("/whatsapp", whatsappRoutes);
+app.use("/webhooks/whatsapp", whatsappRoutes);
