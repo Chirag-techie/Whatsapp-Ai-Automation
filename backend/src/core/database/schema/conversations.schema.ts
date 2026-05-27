@@ -14,7 +14,7 @@ export const conversationStateEnum = pgEnum(
     "BOT_ACTIVE",
     "HUMAN_ACTIVE",
     "SYSTEM_LOCKED",
-  ]
+  ],
 );
 
 export const conversations = pgTable("conversations", {
@@ -30,6 +30,12 @@ export const conversations = pgTable("conversations", {
 
   state: conversationStateEnum("state")
     .default("BOT_ACTIVE")
+    .notNull(),
+
+  createdAt: timestamp("created_at", {
+    withTimezone: true,
+  })
+    .defaultNow()
     .notNull(),
 
   updatedAt: timestamp("updated_at", {

@@ -2,15 +2,7 @@ import { z } from "zod";
 
 import { logger } from "../../../core/logger/logger.js";
 
-export interface ParsedWhatsAppMessage {
-  whatsappMessageId: string;
-  senderPhone: string;
-  senderProfileName: string;
-  messageType: string;
-  textBody: string;
-  timestamp: string;
-  raw: unknown;
-}
+import type { ParsedWhatsAppMessage } from "../../../shared/types/whatsapp.types.js";
 
 const parsedMessageSchema = z.object({
   whatsappMessageId: z.string(),

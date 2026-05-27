@@ -4,38 +4,61 @@ import { messages } from "../../core/database/schema/index.js";
 
 import { logger } from "../../core/logger/logger.js";
 
-interface SaveInboundMessageInput {
+type MessageRole =
+  | "user"
+  | "assistant"
+  | "system";
+
+interface SaveMessageInput {
   customerId: string;
+
   conversationId: string;
-  whatsappMessageId: string;
-  role: "user";
+
+  role: MessageRole;
+
   content: unknown;
+
+  whatsappMessageId?: string;
 }
 
 export const messageService = {
-  async saveInboundMessage(data: SaveInboundMessageInput) {
-    const result = await db
+  async saveMessage(
+    data: SaveMessageInput,
+    executor = db,
+  ) {
+    const result = await executor
       .insert(messages)
       .values({
         customerId: data.customerId,
-        conversationId: data.conversationId,
-        whatsappMessageId: data.whatsappMessageId,
+        conversationId:
+          data.conversationId,
+        whatsappMessageId:
+          data.whatsappMessageId,
         role: data.role,
         content: data.content,
       })
+      // IMPORTANT:
+      // Drizzle query builders are immutable.
+      // Chain directly.
+      //
+      // Safe because PostgreSQL UNIQUE
+      // allows multiple NULL values.
       .onConflictDoNothing({
-        target: messages.whatsappMessageId,
+        target:
+          messages.whatsappMessageId,
       })
       .returning({
         id: messages.id,
       });
 
+    // Duplicate webhook delivery
     if (result.length === 0) {
       logger.warn(
         {
-          whatsappMessageId: data.whatsappMessageId,
+          whatsappMessageId:
+            data.whatsappMessageId,
         },
-        "Duplicate inbound message ignored",
+        "Duplicate message ignored",
       );
 
       return null;

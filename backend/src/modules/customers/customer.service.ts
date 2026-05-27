@@ -1,12 +1,15 @@
 import { db } from "../../core/database/db.js";
-import { customers } from "../../core/database/schema/index.js";
+
+import { customers }
+from "../../core/database/schema/index.js";
 
 export const customerService = {
   async upsertCustomer(
     whatsappId: string,
     name: string,
+    executor = db,
   ) {
-    const result = await db
+    const result = await executor
       .insert(customers)
       .values({
         whatsappId,
