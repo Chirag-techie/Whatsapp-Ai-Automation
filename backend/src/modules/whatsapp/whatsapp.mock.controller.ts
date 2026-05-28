@@ -28,7 +28,7 @@ export async function simulateInbound(
 
     // Generate unique WhatsApp-style message ID
     const whatsappMessageId =
-      "duplicate-t123";
+      "duplicate123";
 
     // Construct realistic Meta webhook payload
     const payload = {
